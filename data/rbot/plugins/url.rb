@@ -9,7 +9,7 @@ define_structure :Url, :channel, :nick, :time, :url, :info
 
 class UrlPlugin < Plugin
   LINK_INFO = "[Link Info]"
-  OUR_UNSAFE = Regexp.new("[^#{URI::PATTERN::UNRESERVED}#{URI::PATTERN::RESERVED}%# ]", false, 'N')
+  OUR_UNSAFE = Regexp.new("[^#{URI::PATTERN::UNRESERVED}#{URI::PATTERN::RESERVED}%# ]", false)
 
   Config.register Config::IntegerValue.new('url.max_urls',
     :default => 100, :validate => Proc.new{|v| v > 0},
