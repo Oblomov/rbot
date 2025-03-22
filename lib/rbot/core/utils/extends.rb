@@ -218,6 +218,28 @@ end
 # TODO make riphtml() just call ircify_html() with stronger purify options.
 #
 class ::String
+  # This method will return a cleaned-up, compacted version of the receiver
+  def irc_cleanup(opts={})
+    txt = self.dup
+    # Remove double formatting options, since they only waste bytes
+    txt.gsub!(/#{Bold}(\s*)#{Bold}/, '\1')
+    txt.gsub!(/#{Underline}(\s*)#{Underline}/, '\1')
+
+    # Simplify whitespace that appears on both sides of a formatting option
+    txt.gsub!(/\s+(#{Bold}|#{Underline})\s+/, ' \1')
+    txt.sub!(/\s+(#{Bold}|#{Underline})\z/, '\1')
+    txt.sub!(/\A(#{Bold}|#{Underline})\s+/, '\1')
+
+    # And finally whitespace is squeezed
+    txt.gsub!(/\s+/, ' ')
+    txt.strip!
+
+    if opts[:limit] && txt.size > opts[:limit]
+      txt = txt.slice(0, opts[:limit]) + "#{Reverse}...#{Reverse}"
+    end
+
+    return txt
+  end
 
   # This method will return a purified version of the receiver, with all HTML
   # stripped off and some of it converted to IRC formatting
@@ -309,25 +331,7 @@ class ::String
       warning "unknown :nbsp option #{val} passed to ircify_html" if val
     end
 
-    # Remove double formatting options, since they only waste bytes
-    txt.gsub!(/#{Bold}(\s*)#{Bold}/, '\1')
-    txt.gsub!(/#{Underline}(\s*)#{Underline}/, '\1')
-
-    # Simplify whitespace that appears on both sides of a formatting option
-    txt.gsub!(/\s+(#{Bold}|#{Underline})\s+/, ' \1')
-    txt.sub!(/\s+(#{Bold}|#{Underline})\z/, '\1')
-    txt.sub!(/\A(#{Bold}|#{Underline})\s+/, '\1')
-
-    # And finally whitespace is squeezed
-    txt.gsub!(/\s+/, ' ')
-    txt.strip!
-
-    if opts[:limit] && txt.size > opts[:limit]
-      txt = txt.slice(0, opts[:limit]) + "#{Reverse}...#{Reverse}"
-    end
-
-    # Decode entities and strip whitespace
-    return txt
+    return txt.irc_cleanup(opts)
   end
 
   # As above, but modify the receiver
