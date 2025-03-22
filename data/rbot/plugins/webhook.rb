@@ -137,8 +137,11 @@ class WebHookPlugin < Plugin
 
     # the default output filter
     webhook_out_filter :default do |s|
+      contents = s[:contents]
+      s[:clipped_contents] = contents.irc_cleanup rescue contents if contents
+
       line1 = "%{repo}: %{author} %{action}"
-      [:number, :title, :ref, :link].each do |k|
+      [:number, :title, :ref, :link, :clipped_contents].each do |k|
         line1 += "%{#{k}}" if s[k]
       end
       make_stream(line1, nil, s,
@@ -146,6 +149,7 @@ class WebHookPlugin < Plugin
                   :author_wrap => Bold,
                   :number_wrap => [' ', ''],
                   :title_wrap => [" #{Irc.color(:green)}", NormalText],
+                  :clipped_contents_wrap => [': ', ''],
                   :ref_wrap =>  [" (#{Irc.color(:yellow)}", "#{NormalText})"],
                   :link_wrap => [" <#{Irc.color(:aqualight)}", "#{NormalText}>"])
     end
@@ -177,6 +181,8 @@ class WebHookPlugin < Plugin
   }
 
   # Host filters should return nil if they cannot process the given payload+request pair
+  # TODO the logic with the fallbacks that was supposed to simplify things is starting to get
+  # a bit messy, we should probably handle things with proper event-specific handling
   def github_host_filter(input_stream)
     request = input_stream[:request]
     json = input_stream[:payload]
@@ -201,15 +207,17 @@ class WebHookPlugin < Plugin
 
     # :issue_comment needs special handling because it has two primary objects
     # (the issue and the comment), and we take stuff from both
-    obj = json[event_key] || json[:issue]
+    obj = json[event_key] || json[:comment] || json[:issue]
+    issue = json[:issue]
     if obj
-      link = json[:comment][:html_url] rescue nil if event == :issue_comment
-      link ||= obj[:html_url] || obj[:url]
-      title = obj[:title]
+      link ||= obj[:html_url] || json[:issue][:html_url] rescue obj[:url]
+      title = obj[:title] || issue[:title] rescue json[:title]
     else
       link = json[:html_url] || json[:url] || json[:compare]
     end
     title ||= json[:zen] || json[:commits].last[:message].lines.first.chomp rescue nil
+
+    contents = obj[:body] || issue[:body] rescue json[:body]
 
     stream_hash = { :event => event,
                     :event_key => event_key,
@@ -217,12 +225,14 @@ class WebHookPlugin < Plugin
                     :author => (json[:sender][:login] rescue nil),
                     :action => json[:action] || event,
                     :title => title,
+                    :contents => contents,
                     :link => link
     }
 
     stream_hash[:ref] ||= json[:base][:ref] if json[:base]
 
     num = json[:number] || obj[:number] rescue nil
+    num ||= issue[:number] rescue nil
     stream_hash[:number] = '%{object} #%{num}' % { :num => num, :object => event_key.to_s.gsub('_', ' ') } if num
     num = json[:size] || json[:commits].size rescue nil
     stream_hash[:number] = _("%{num} commits") % { :num => num } if num
