@@ -169,6 +169,11 @@ class WebHookPlugin < Plugin
       gitlab_host_filter(s)
     end
 
+    # discourse
+    webhook_host_filter :discourse do |s|
+      discourse_host_filter(s)
+    end
+
     @user_types ||= datafile 'filters.rb'
     load_filters
     load_filters :path => @user_types
@@ -316,6 +321,60 @@ class WebHookPlugin < Plugin
 
     debug stream_hash
     return input_stream.merge stream_hash
+  end
+
+  def discourse_host_filter(input_stream)
+    request = input_stream[:request]
+    json = input_stream[:payload]
+    req_repo = input_stream[:repo]
+
+    instance = request['x-discourse-instance']
+
+    # TODO cache the regexp?
+    return nil unless instance and Regexp.new(Regexp.quote(req_repo)).match(instance)
+
+    event = request['x-discourse-event'].to_sym
+    event_type = request['x-discourse-event-type'].to_sym
+
+    obj = json[event_type]
+
+    debug obj
+
+    undef_user = '(undefined)'
+    title = nil
+    link = nil
+    text = nil
+
+    if String === obj
+      title = obj
+    else
+      uname = obj[:created_by][:name] rescue obj[:name]
+      uid = obj[:user_id]
+
+      user = uname if uname and not uname.empty?
+      user ||= obj[:created_by][:username] rescue obj[:username]
+      user ||= "user #{uid}" if uid
+
+      title = obj[:fancy_title] || obj[:topic_title] || obj[:description_text]
+      link = [instance, obj[:topic_url]].join if obj[:topic_url]
+      link ||= [instance, event_type.to_s[0], obj[:id]].zip.join('/')
+      # clip contents to a double-width twit
+      contents = obj[:cooked].ircify_html rescue obj[:raw] || obj[:description_excerpt]
+    end
+
+    stream_hash = {
+      :event => event,
+      :event_key => event_type,
+      :author => user || undef_user,
+      :action => event.to_s.gsub('_', ' '),
+      :title => title,
+      :link => link,
+      :contents => contents
+    }
+
+    debug stream_hash
+    return input_stream.merge stream_hash
+
   end
 
   def initialize
