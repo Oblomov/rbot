@@ -332,6 +332,11 @@ class Registry
     end
     alias size length
 
+    # check if the db is empty
+    def empty?
+      return registry.length == 0
+    end
+
     # Returns all classes from the namespace that implement this interface
     def self.get_impl
       ObjectSpace.each_object(Class).select { |klass| klass.ancestors[1] == self }
